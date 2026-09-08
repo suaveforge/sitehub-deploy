@@ -1,0 +1,65 @@
+name: Enable SiteHub Pages once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages-enable-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  enable:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Enable Pages using installed organization deploy token
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          TOKEN_FILE=/home/actions-runners/suaveforge-org/secrets/deploy-token
+          test -s "$TOKEN_FILE"
+          TOKEN=$(tr -d '\r\n' < "$TOKEN_FILE")
+          test -n "$TOKEN"
+          echo "::add-mask::$TOKEN"
+          API=https://api.github.com/repos/suaveforge/sitehub-deploy/pages
+          common=(-H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+          get_code=$(curl -sS -o /home/.sitehub-pages-get-${GITHUB_RUN_ID}.json -w '%{http_code}' "${common[@]}" "$API")
+          if [ "$get_code" = 200 ]; then
+            echo 'SITEHUB_PAGES_ALREADY_ENABLED=yes'
+          elif [ "$get_code" = 404 ]; then
+            create_code=$(curl -sS -o /home/.sitehub-pages-create-${GITHUB_RUN_ID}.json -w '%{http_code}' -X POST "${common[@]}" -H 'Content-Type: application/json' -d '{"build_type":"workflow"}' "$API")
+            if [ "$create_code" != 201 ] && [ "$create_code" != 409 ]; then
+              echo "SITEHUB_PAGES_ENABLE_FAIL_HTTP=$create_code" >&2
+              cat /home/.sitehub-pages-create-${GITHUB_RUN_ID}.json >&2 || true
+              exit 41
+            fi
+            echo "SITEHUB_PAGES_CREATE_HTTP=$create_code"
+          else
+            echo "SITEHUB_PAGES_GET_FAIL_HTTP=$get_code" >&2
+            cat /home/.sitehub-pages-get-${GITHUB_RUN_ID}.json >&2 || true
+            exit 42
+          fi
+          verify_code=$(curl -sS -o /home/.sitehub-pages-verify-${GITHUB_RUN_ID}.json -w '%{http_code}' "${common[@]}" "$API")
+          test "$verify_code" = 200
+          echo 'SITEHUB_PAGES_ENABLED=yes'
+          rm -f /home/.sitehub-pages-get-${GITHUB_RUN_ID}.json /home/.sitehub-pages-create-${GITHUB_RUN_ID}.json /home/.sitehub-pages-verify-${GITHUB_RUN_ID}.json
+
+  deploy:
+    needs: enable
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: '.'
+      - id: deployment
+        uses: actions/deploy-pages@v4
