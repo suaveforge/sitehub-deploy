@@ -1,0 +1,1 @@
+Publish static SiteHub assets after fallback image generation 2026-09-09
