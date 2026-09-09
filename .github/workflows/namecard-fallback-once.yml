@@ -1,0 +1,51 @@
+name: Generate SiteHub NameCard fallback once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/namecard-fallback-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate deterministic 1200x630 PNG
+        shell: python
+        run: |
+          from pathlib import Path
+          import struct,zlib
+          w,h=1200,630
+          rows=[]
+          for y in range(h):
+              row=bytearray([0])
+              for x in range(w):
+                  # restrained dark blue/graphite gradient with geometric highlight
+                  r=15 + (x*10//w)
+                  g=23 + (y*13//h)
+                  b=42 + ((x+y)*18//(w+h))
+                  if 105<x<500 and 120<y<510 and ((x-300)**2+(y-315)**2)<150**2:
+                      r,g,b=24,54,88
+                  if 650<x<1080 and 150<y<470 and abs((y-315)-((x-865)//3))<12:
+                      r,g,b=45,82,118
+                  row.extend((r,g,b))
+              rows.append(bytes(row))
+          raw=b''.join(rows)
+          def chunk(t,d):
+              return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
+          png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(raw,9))+chunk(b'IEND',b'')
+          p=Path('assets/namecard-default.png'); p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(png)
+          print('PNG_BYTES',len(png))
+      - name: Commit image
+        run: |
+          set -Eeuo pipefail
+          file assets/namecard-default.png | grep -q 'PNG image data, 1200 x 630'
+          git config user.name 'SuaveForge Automation'
+          git config user.email '53187583+programmer119@users.noreply.github.com'
+          git add assets/namecard-default.png
+          git commit -m 'Add shared 1200x630 NameCard fallback'
+          git push
