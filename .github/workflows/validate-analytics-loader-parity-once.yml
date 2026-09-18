@@ -1,0 +1,29 @@
+name: Validate SiteHub analytics loader parity once
+
+on:
+  push:
+    branches: ['fix/analytics-loader-parity-20260918']
+    paths: ['.github/workflows/validate-analytics-loader-parity-once.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: [self-hosted, Linux, X64, server123, suaveforge-deploy]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate deployed loader syntax and features
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check analytics-loader.js
+          grep -Fq "captureVersion:'20260918-sitehub-02'" analytics-loader.js
+          grep -Fq "qaSession" analytics-loader.js
+          grep -Fq "trackConversion" analytics-loader.js
+          grep -Fq "sitehub_qa" analytics-loader.js
+          echo SITEHUB_ANALYTICS_DEPLOY_PARITY=PASS
