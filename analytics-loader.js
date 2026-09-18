@@ -28,6 +28,9 @@
   const visitorId=get(localStorage,prefix+'vid');
   const sessionId=get(sessionStorage,prefix+'sid');
   const params=new URLSearchParams(location.search);
+  const qaRequested=params.get('sitehub_qa')==='1';
+  if(qaRequested){try{sessionStorage.setItem(prefix+'qa','1')}catch{}}
+  const qaSession=qaRequested||(()=>{try{return sessionStorage.getItem(prefix+'qa')==='1'}catch{return false}})();
   let first={};
   try{first=JSON.parse(sessionStorage.getItem(prefix+'touch')||'{}')}catch{}
   if(!first?.landingPage){
@@ -98,7 +101,7 @@
     const payload={
       ...base(),eventType:'page_view',hostname:location.hostname,pathname:location.pathname,
       pageTitle:document.title||'',referrer:first.referrer||'',
-      metadata:{pageViewId,url:location.pathname+location.search,captureVersion:'20260909-sitehub-01',capturedAt:new Date().toISOString()}
+      metadata:{pageViewId,url:location.pathname+location.search,captureVersion:'20260918-sitehub-02',capturedAt:new Date().toISOString(),qa:qaSession}
     };
     const item={id:pageViewId,body:JSON.stringify(payload),createdAt:Date.now(),attempts:0};
     const queue=readQueue().filter(x=>!ackedIds().has(x.id));
@@ -120,8 +123,20 @@
   addEventListener('pagehide',beaconPending,{capture:true});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')beaconPending();else void flush()},{capture:true});
 
+  const trackConversion=(conversionKey,metadata={})=>{
+    if(typeof conversionKey!=='string'||!conversionKey.trim())return false;
+    const eventId=uuid();
+    const payload={
+      ...base(),eventType:'conversion',hostname:location.hostname,pathname:location.pathname,
+      pageTitle:document.title||'',referrer:first.referrer||'',
+      metadata:{...metadata,conversionKey:conversionKey.trim(),eventId,qa:qaSession,capturedAt:new Date().toISOString()}
+    };
+    const item={id:eventId,body:JSON.stringify(payload),createdAt:Date.now(),attempts:0};
+    const queue=readQueue().filter(x=>!ackedIds().has(x.id));queue.push(item);writeQueue(queue);void flush();return true;
+  };
+
   capture();
   setTimeout(()=>void flush(),1200);
   setTimeout(()=>void flush(),4500);
-  window.SITEHUB_ANALYTICS={active:true,projectId,flush,capture};
+  window.SITEHUB_ANALYTICS={active:true,projectId,flush,capture,trackConversion,qa:qaSession};
 })();
