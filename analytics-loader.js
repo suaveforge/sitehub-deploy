@@ -43,7 +43,19 @@
     }
   }
   const ownerSession=ownerRequested||ownerFromMonitor||ownerCookie()||(()=>{try{return localStorage.getItem(prefix+'owner')==='1'}catch{return false}})();
-  const automationSession=navigator.webdriver===true;
+  const botLabel=(()=>{
+    const ua=navigator.userAgent||'';
+    const rules=[
+      [/Google-InspectionTool/i,'Google-InspectionTool'],[/Googlebot/i,'Googlebot'],[/AdsBot-Google/i,'AdsBot-Google'],
+      [/bingbot/i,'bingbot'],[/BingPreview/i,'BingPreview'],[/DuckDuckBot/i,'DuckDuckBot'],[/YandexBot/i,'YandexBot'],
+      [/Baiduspider/i,'Baiduspider'],[/facebookexternalhit/i,'facebookexternalhit'],[/Twitterbot/i,'Twitterbot'],
+      [/LinkedInBot/i,'LinkedInBot'],[/Slackbot/i,'Slackbot'],[/Discordbot/i,'Discordbot'],
+      [/Chrome-Lighthouse/i,'Chrome-Lighthouse'],[/HeadlessChrome/i,'HeadlessChrome'],[/Lighthouse/i,'Lighthouse']
+    ];
+    for(const [re,label] of rules)if(re.test(ua))return label;
+    return /(?:bot|crawler|spider|crawling)/i.test(ua)?'GenericBot':'';
+  })();
+  const automationSession=navigator.webdriver===true||!!botLabel;
   let first={};
   try{first=JSON.parse(sessionStorage.getItem(prefix+'touch')||'{}')}catch{}
   if(!first?.landingPage){
@@ -59,6 +71,7 @@
 
   const browser=()=>{
     const ua=navigator.userAgent||'';
+    if(botLabel)return botLabel;
     if(/Edg\//.test(ua))return 'Edge';
     if(/OPR\//.test(ua))return 'Opera';
     if(/Chrome\//.test(ua))return 'Chrome';
@@ -114,7 +127,7 @@
     const payload={
       ...base(),eventType:'page_view',hostname:location.hostname,pathname:location.pathname,
       pageTitle:document.title||'',referrer:first.referrer||'',
-      metadata:{pageViewId,url:location.pathname+location.search,captureVersion:'20260919-sitehub-03',capturedAt:new Date().toISOString(),qa:qaSession,owner:ownerSession,automation:automationSession}
+      metadata:{pageViewId,url:location.pathname+location.search,captureVersion:'20260919-sitehub-04',capturedAt:new Date().toISOString(),qa:qaSession,owner:ownerSession,automation:automationSession,bot:!!botLabel,botLabel}
     };
     const item={id:pageViewId,body:JSON.stringify(payload),createdAt:Date.now(),attempts:0};
     const queue=readQueue().filter(x=>!ackedIds().has(x.id));
@@ -142,7 +155,7 @@
     const payload={
       ...base(),eventType:'conversion',hostname:location.hostname,pathname:location.pathname,
       pageTitle:document.title||'',referrer:first.referrer||'',
-      metadata:{...metadata,conversionKey:conversionKey.trim(),eventId,qa:qaSession,owner:ownerSession,automation:automationSession,capturedAt:new Date().toISOString()}
+      metadata:{...metadata,conversionKey:conversionKey.trim(),eventId,qa:qaSession,owner:ownerSession,automation:automationSession,bot:!!botLabel,botLabel,capturedAt:new Date().toISOString()}
     };
     const item={id:eventId,body:JSON.stringify(payload),createdAt:Date.now(),attempts:0};
     const queue=readQueue().filter(x=>!ackedIds().has(x.id));queue.push(item);writeQueue(queue);void flush();return true;
