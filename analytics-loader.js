@@ -31,6 +31,19 @@
   const qaRequested=params.get('sitehub_qa')==='1';
   if(qaRequested){try{sessionStorage.setItem(prefix+'qa','1')}catch{}}
   const qaSession=qaRequested||(()=>{try{return sessionStorage.getItem(prefix+'qa')==='1'}catch{return false}})();
+
+  const refHost=(()=>{try{return new URL(document.referrer||'').hostname.toLowerCase()}catch{return ''}})();
+  const ownerRequested=params.get('sitehub_owner')==='1';
+  const ownerFromMonitor=refHost==='monitor.suaveforge.com';
+  const ownerCookie=()=>document.cookie.split(';').some(x=>x.trim()==='sitehub_internal=owner');
+  if(ownerRequested||ownerFromMonitor){
+    try{localStorage.setItem(prefix+'owner','1')}catch{}
+    if(location.hostname==='suaveforge.com'||location.hostname.endsWith('.suaveforge.com')){
+      try{document.cookie='sitehub_internal=owner; Max-Age=31536000; Path=/; Domain=.suaveforge.com; SameSite=Lax; Secure'}catch{}
+    }
+  }
+  const ownerSession=ownerRequested||ownerFromMonitor||ownerCookie()||(()=>{try{return localStorage.getItem(prefix+'owner')==='1'}catch{return false}})();
+  const automationSession=navigator.webdriver===true;
   let first={};
   try{first=JSON.parse(sessionStorage.getItem(prefix+'touch')||'{}')}catch{}
   if(!first?.landingPage){
@@ -101,7 +114,7 @@
     const payload={
       ...base(),eventType:'page_view',hostname:location.hostname,pathname:location.pathname,
       pageTitle:document.title||'',referrer:first.referrer||'',
-      metadata:{pageViewId,url:location.pathname+location.search,captureVersion:'20260918-sitehub-02',capturedAt:new Date().toISOString(),qa:qaSession}
+      metadata:{pageViewId,url:location.pathname+location.search,captureVersion:'20260919-sitehub-03',capturedAt:new Date().toISOString(),qa:qaSession,owner:ownerSession,automation:automationSession}
     };
     const item={id:pageViewId,body:JSON.stringify(payload),createdAt:Date.now(),attempts:0};
     const queue=readQueue().filter(x=>!ackedIds().has(x.id));
@@ -129,7 +142,7 @@
     const payload={
       ...base(),eventType:'conversion',hostname:location.hostname,pathname:location.pathname,
       pageTitle:document.title||'',referrer:first.referrer||'',
-      metadata:{...metadata,conversionKey:conversionKey.trim(),eventId,qa:qaSession,capturedAt:new Date().toISOString()}
+      metadata:{...metadata,conversionKey:conversionKey.trim(),eventId,qa:qaSession,owner:ownerSession,automation:automationSession,capturedAt:new Date().toISOString()}
     };
     const item={id:eventId,body:JSON.stringify(payload),createdAt:Date.now(),attempts:0};
     const queue=readQueue().filter(x=>!ackedIds().has(x.id));queue.push(item);writeQueue(queue);void flush();return true;
@@ -138,5 +151,5 @@
   capture();
   setTimeout(()=>void flush(),1200);
   setTimeout(()=>void flush(),4500);
-  window.SITEHUB_ANALYTICS={active:true,projectId,flush,capture,trackConversion,qa:qaSession};
+  window.SITEHUB_ANALYTICS={active:true,projectId,flush,capture,trackConversion,qa:qaSession,owner:ownerSession,automation:automationSession};
 })();
